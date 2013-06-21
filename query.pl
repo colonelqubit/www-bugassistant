@@ -25,21 +25,60 @@ open(FILE, "version-blacklist.txt") or die ("Unable to open version blacklist.")
 %blacklist = map { chomp; $_ => 1 } ( <FILE> );
 close(FILE);
 
-while(<STDIN>) {
-    eval $_ if(s/(cpts|vers)\[(\d+)\]\s+=/\$$1\[$2\]=/);
-    if(/<select\s+name="product"/../<\/select/) {
-        if(/libreoffice/i) {
-            $libreoffice = $count;
-        }
-	if(/<select\s+name="product"/) {
-	    $count = 0;
-	} elsif(/<option/) {
-	    $count++;
+# Function to get version #s from query.cgi (url below):
+# https://bugs.freedesktop.org/query.cgi?product=LibreOffice&query_format=advanced
+sub version_numbers_from_query_cgi {
+    while(<STDIN>) {
+	eval $_ if(s/(cpts|vers)\[(\d+)\]\s+=/\$$1\[$2\]=/);
+	if(/<select\s+name="product"/../<\/select/) {
+	    if(/libreoffice/i) {
+		$libreoffice = $count;
+	    }
+	    if(/<select\s+name="product"/) {
+		$count = 0;
+	    } elsif(/<option/) {
+		$count++;
+	    }
 	}
     }
+
+    return @{$vers[$libreoffice]};
 }
 
-print "<?xml version='1.0' encoding='ISO-8859-1'?>\n";
+# Function to get version #s from enter_bug.cgi (url below):
+# https://bugs.freedesktop.org/enter_bug.cgi?product=LibreOffice&bug_status=UNCONFIRMED
+#
+# The big reason to use enter_bug.cgi is that it will not include
+# "inactive" version numbers that we do not want to present as an
+# option to users when filing new bugs. For more info, see:
+# https://bugs.freedesktop.org/show_bug.cgi?id=55460
+sub version_numbers_from_enter_bug_cgi {
+    $time_to_nom_versions = 0;
+    @versions = ();
+
+    while(<STDIN>) {
+	if($time_to_nom_versions) {
+	    # Read-in all of the versions stored as OPTION values.
+	    if(m/.*<option value="(.*)">.*/) {
+		push(@versions, $1);
+	    } else {
+		# We've reached the end of the list of versions and no
+		# longer need to read from this file.
+		last;
+	    }
+	} elsif(m/<select name="version"/) {
+	    $time_to_nom_versions = 1;
+	}
+    }
+    
+    return @versions;
+}
+
+# We can handle processing version #s from either query.cgi or from
+# enter_bug.cgi.
+#@unsorted_versions = version_numbers_from_query_cgi();
+@unsorted_versions = version_numbers_from_enter_bug_cgi();
+
 
 @versions = sort { 
     if (looks_like_number(substr($a, 0, 1)) == 0) { 
@@ -48,7 +87,10 @@ print "<?xml version='1.0' encoding='ISO-8859-1'?>\n";
         return -1;
     } else {
         return lc($b) cmp lc($a);
-    } } @{$vers[$libreoffice]};
+    } } @unsorted_versions;
+
+print "<?xml version='1.0' encoding='ISO-8859-1'?>\n";
+
 print <<EOF;
             <div class="select-header">
               <div class="chosen">$ARGV[0]</div>
