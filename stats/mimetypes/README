@@ -1,0 +1,34 @@
+This file contains information about our MIMEtypes work
+
+Usage
+-------
+
+Run this script on the command line. It'll spit out some information
+about the attachments we find suspect.
+
+Install
+-------
+
+You might need to install the following package support:
+- feedparser   # Ubuntu: python-feedparser
+
+Why?
+----
+
+The reason why we currently care so much about MIMEtypes in Bugzilla
+is because our current instance on FDO incorrectly sets the MIMEtype
+on many of our attachments.
+
+
+What do we regard as suspect?
+-----------------------------
+
+Supported:
+- Any attachment of type application/octet-stream
+
+Planned:
+- Attachments where "file -b --mime-type stats.pl <attachment>" does
+  not match the mimetype in bugzilla
+- Any file extension we haven't run into yet (we can whitelist)
+- Any file w/o a file extension (probably)
+
