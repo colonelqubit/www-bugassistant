@@ -43,16 +43,16 @@ from xml.dom import minidom
 from xml.sax.saxutils import escape
 
 # If we want lots of information during the run...
-VERBOSE = 0
+VERBOSE = 1
 # If we want to log our results.
 LOG_RESULTS = 0
 # The maximum # of bugs we'll iterate over at one time.
-MAX_NUM_BUGS = 1000
+MAX_NUM_BUGS = 1
 # Download all attachments to disk.
-DOWNLOAD_ATTACHMENTS = 0
+DOWNLOAD_ATTACHMENTS = 1
 # Print an HTML file containing detailed information about the
 # scrutinized attachments.
-CREATE_HTML_REPORT = 0
+CREATE_HTML_REPORT = 1
 
 # Some static variables relating to our Bugzilla and tests.
 BUGZILLA_URL = "https://bugs.libreoffice.org/"
@@ -72,7 +72,10 @@ def attachment_info_to_html_table(bugDict):
                          'extension' : [3, 'Filename Extension'],
                          'filepath'  : [4, 'File Path'],
                          'mimetype'  : [5, 'MIME-type'],
-                         'lastChange': [6, 'Last Time Changed in DB']}
+                         # MIMEtype ascertained by downloading and
+                         # testing the file itself.
+                         'computedmimetype'  : [6, 'MIME-type'],
+                         'lastChange': [7, 'Last Time Changed in DB']}
     # Sort our header keys based on our index value
     headerKeys = sorted(attachmentHeaders.keys(),
                         key=lambda k: attachmentHeaders[k][0])
@@ -91,6 +94,10 @@ def attachment_info_to_html_table(bugDict):
         for attachment_id, variables in attachments.items():
             # Print out a row for each attachment.
             print("<tr><td></td>\n")
+
+            # Determine if the mimetype and computed mimetype match.
+            mimetypeClass = 'mimeMatch' if (variables["mimetype"] == variables["computedmimetype"]) else 'mimeNoMatch'
+
             for k in headerKeys:
                 # Provide a link into Bugzilla for the attachment.
                 if(k == "id"):
@@ -98,6 +105,10 @@ def attachment_info_to_html_table(bugDict):
                 # Also provide a link for editing.
                 elif(k == "edit"):
                     print("  <td><a href=\"{0}{1}&action=edit\">{1}</a></td>\n".format(ATTACHMENT_URL, variables["id"]))
+                # Check that the computed mimetype matches the expected type.
+                # Matchess 'mimetype' and 'computedmimetype'
+                elif "mimetype" in k:  
+                    print("  <td class=\"{0}\">{1}</td>\n".format(mimetypeClass, variables[k]))
                 else:
                     print("  <td>{0}</td>\n".format(variables[k]))
             print("</tr>\n")
@@ -181,8 +192,9 @@ def get_through_rpc_query(url, mimetype, bugDict):
 
     query = dict()
     query['ids'] = bug_id
-    proxy = xmlrpclib.ServerProxy('https://bugs.freedesktop.org/xmlrpc.cgi',
-                                  use_datetime = True)
+    proxy = xmlrpclib.ServerProxy('https://bugs.freedesktop.org/xmlrpc.cgi')
+#    proxy = xmlrpclib.ServerProxy('https://bugs.freedesktop.org/xmlrpc.cgi',
+#                                  use_datetime = True)
     result = proxy.Bug.attachments(query)
     attachments = result['bugs'][bug_id]
     count = 0
@@ -198,6 +210,8 @@ def get_through_rpc_query(url, mimetype, bugDict):
         a_file_name = str(a['file_name'])
         a_extension = os.path.splitext(a_file_name)[1][1:].strip()
         # The new filename is <bug_id>_<attachment_id>_<filename>.
+        # Sanitize the given filename first:
+        #sanitizedFileName = "".join([x if x.isalnum() else "_" for x in a_file_name])
         filepath = "attachments/%s_%s_%s" % (a_id, bug_id, a_file_name)
 
         a_mime = str(a['content_type'])
@@ -210,21 +224,36 @@ def get_through_rpc_query(url, mimetype, bugDict):
         if DOWNLOAD_ATTACHMENTS:
             # Grab the attachment.
             if VERBOSE:
-                print("----> Writing attachment out to %s." % filepath)
+                print("----> Writing attachment out to (%s)." % filepath)
                 with open("attachments/%s" % filepath, "wb") as handle:
                     handle.write(a['data'].data)
+
+        # If we have access to the particular file, check the MIMEtype!
+        computedMimetype = ""
+        try:
+            print("would usually compute mimetype here")
+            #computedMimetype = call(["file", "-b", "--mime-type", filepath])
+        except IOError as e:
+            # If the file does not exist, then we ignore the step and
+            # move on.
+            print("File not found/related")
+        except :
+            # If we don't know what went wrong, we just mention the
+            # failure.
+            print("Sorry, not sure what went wrong here...")
 
         if a['content_type'] == mimetype:
             count += 1
 
         # Store information about each attachment.
         lastChangeTime = a['last_change_time'].strftime("%Y-%m-%d %H:%M")
-        attachInfoDict[a_id] = {'id'         : a_id,
-                                'filename'   : a_file_name,
-                                'extension'  : a_extension,
-                                'filepath'   : filepath,
-                                'mimetype'   : a_mime,
-                                'lastChange' : lastChangeTime
+        attachInfoDict[a_id] = {'id'               : a_id,
+                                'filename'         : a_file_name,
+                                'extension'        : a_extension,
+                                'filepath'         : filepath,
+                                'mimetype'         : a_mime,
+                                'computedmimetype' : computedMimetype,
+                                'lastChange'       : lastChangeTime
                                 # We'd also like to include last_updated date,
                                 # Info about file extension, etc..
                                 }

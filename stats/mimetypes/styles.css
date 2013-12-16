@@ -1,0 +1,13 @@
+/* Styles for the MIME-types tool */
+
+table, td, th {
+  border: 1px solid black;
+}
+
+.mimeMatch {
+    background-color: lime-green;
+}
+
+.mimeNoMatch {
+    background-color: red;
+}
