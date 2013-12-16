@@ -4,10 +4,18 @@ table, td, th {
   border: 1px solid black;
 }
 
+/* Have good (green) and bad (red) colors to indicate when the
+   MIMEtypes appear to be incorrect  
+*/
 .mimeMatch {
-    background-color: lime-green;
+    background-color: limegreen;
 }
 
 .mimeNoMatch {
     background-color: red;
+}
+
+/* Rows for bugs (i.e. a single bug id) need to stand out */
+.bug_row {
+    background-color: cornflowerblue;
 }

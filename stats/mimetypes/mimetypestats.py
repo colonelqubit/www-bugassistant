@@ -30,6 +30,7 @@ import sys
 import time
 import xmlrpclib
 import pprint
+import subprocess
 
 try:
     from urllib.request import urlopen
@@ -43,16 +44,16 @@ from xml.dom import minidom
 from xml.sax.saxutils import escape
 
 # If we want lots of information during the run...
-VERBOSE = 1
+VERBOSE = 0
 # If we want to log our results.
 LOG_RESULTS = 0
 # The maximum # of bugs we'll iterate over at one time.
-MAX_NUM_BUGS = 1
+MAX_NUM_BUGS = 1000
 # Download all attachments to disk.
-DOWNLOAD_ATTACHMENTS = 1
+DOWNLOAD_ATTACHMENTS = 0
 # Print an HTML file containing detailed information about the
 # scrutinized attachments.
-CREATE_HTML_REPORT = 1
+CREATE_HTML_REPORT = 0
 
 # Some static variables relating to our Bugzilla and tests.
 BUGZILLA_URL = "https://bugs.libreoffice.org/"
@@ -71,10 +72,10 @@ def attachment_info_to_html_table(bugDict):
                          'filename'  : [2, 'File Name'],
                          'extension' : [3, 'Filename Extension'],
                          'filepath'  : [4, 'File Path'],
-                         'mimetype'  : [5, 'MIME-type'],
+                         'mimetype'  : [5, 'MIME-type in BZ'],
                          # MIMEtype ascertained by downloading and
                          # testing the file itself.
-                         'computedmimetype'  : [6, 'MIME-type'],
+                         'computedmimetype'  : [6, 'Computed MIME-type'],
                          'lastChange': [7, 'Last Time Changed in DB']}
     # Sort our header keys based on our index value
     headerKeys = sorted(attachmentHeaders.keys(),
@@ -89,7 +90,7 @@ def attachment_info_to_html_table(bugDict):
     for bug_id, attachments in bugDict.items():
 
         # Print out a row for each bug.
-        print("<tr><td><a href=\"{0}{1}\">{1}</a></td></tr>\n".format(BUGZILLA_URL, bug_id, bug_id))
+        print("<tr><td colspan=\"{0}\" class=\"bug_row\"><a href=\"{1}{2}\">{2}</a></td></tr>\n".format(len(headerKeys) +1, BUGZILLA_URL, bug_id))
     
         for attachment_id, variables in attachments.items():
             # Print out a row for each attachment.
@@ -192,9 +193,8 @@ def get_through_rpc_query(url, mimetype, bugDict):
 
     query = dict()
     query['ids'] = bug_id
-    proxy = xmlrpclib.ServerProxy('https://bugs.freedesktop.org/xmlrpc.cgi')
-#    proxy = xmlrpclib.ServerProxy('https://bugs.freedesktop.org/xmlrpc.cgi',
-#                                  use_datetime = True)
+    proxy = xmlrpclib.ServerProxy('https://bugs.freedesktop.org/xmlrpc.cgi',
+                                  use_datetime = True)
     result = proxy.Bug.attachments(query)
     attachments = result['bugs'][bug_id]
     count = 0
@@ -211,8 +211,8 @@ def get_through_rpc_query(url, mimetype, bugDict):
         a_extension = os.path.splitext(a_file_name)[1][1:].strip()
         # The new filename is <bug_id>_<attachment_id>_<filename>.
         # Sanitize the given filename first:
-        #sanitizedFileName = "".join([x if x.isalnum() else "_" for x in a_file_name])
-        filepath = "attachments/%s_%s_%s" % (a_id, bug_id, a_file_name)
+        sanitizedFileName = "".join([x if x.isalnum() else "." for x in a_file_name])
+        filepath = "attachments/%s_%s_%s" % (a_id, bug_id, sanitizedFileName)
 
         a_mime = str(a['content_type'])
 
@@ -225,14 +225,13 @@ def get_through_rpc_query(url, mimetype, bugDict):
             # Grab the attachment.
             if VERBOSE:
                 print("----> Writing attachment out to (%s)." % filepath)
-                with open("attachments/%s" % filepath, "wb") as handle:
+                with open("%s" % filepath, "wb") as handle:
                     handle.write(a['data'].data)
 
         # If we have access to the particular file, check the MIMEtype!
         computedMimetype = ""
         try:
-            print("would usually compute mimetype here")
-            #computedMimetype = call(["file", "-b", "--mime-type", filepath])
+            computedMimetype = subprocess.check_output(["file", "-b", "--mime-type", filepath]).rstrip()
         except IOError as e:
             # If the file does not exist, then we ignore the step and
             # move on.
@@ -254,8 +253,6 @@ def get_through_rpc_query(url, mimetype, bugDict):
                                 'mimetype'         : a_mime,
                                 'computedmimetype' : computedMimetype,
                                 'lastChange'       : lastChangeTime
-                                # We'd also like to include last_updated date,
-                                # Info about file extension, etc..
                                 }
 
     # Store the attachment dict back into our master dict.
