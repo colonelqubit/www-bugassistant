@@ -6,6 +6,13 @@ Usage
 Run this script on the command line. It'll spit out some information
 about the attachments we find suspect.
 
+If MAX_NUM_BUGS is set to something large (e.g. 500), and both
+DOWNLOAD_ATTACHMENTS and CREATE_HTML_REPORT are both set to 1, the
+script will download attachments from a large number of included bugs
+and provide a fancy HTML page (see file index.html) showing which
+attachment MIMEtypes we find suspect.
+
+
 Install
 -------
 
@@ -27,7 +34,7 @@ Supported:
 - Any attachment of type application/octet-stream
 
 Planned:
-- Attachments where "file -b --mime-type stats.pl <attachment>" does
+- Attachments where "file -b --mime-type <attachment>" does
   not match the mimetype in bugzilla
 - Any file extension we haven't run into yet (we can whitelist)
 - Any file w/o a file extension (probably)
